@@ -29,9 +29,9 @@ We also set up an interrupt to switch the waveform between various LUTs.
 //TO DO:
 //TASK 2
 //Assign values to NS, TIM2CLK and F_SIGNAL
-#define NS
-#define TIM2CLK
-#define F_SIGNAL
+#define NS 200
+#define TIM2CLK 48000000
+#define F_SIGNAL 4970
 
 /* USER CODE END PD */
 
@@ -50,13 +50,43 @@ DMA_HandleTypeDef hdma_tim2_ch1;
 //TO DO:
 //TASK 1
 //Create global variables for LUTs
-uint32_t sin_LUT[NS] = {};
-uint32_t saw_LUT[NS] = {};
-uint32_t triangle_LUT[NS] = {};
-uint32_t previousMillis = 0;
-uint32_t currentMillis = 0;
-uint32_t counterOutside = 0; //For testing only
-uint32_t counterInside = 0;  //For testing only
+uint32_t sin_LUT[NS] = {
+		527,543,559,575,591,607,623,638,654,669,684,699,714,729,743,757,771,785,
+		799,812,825,837,849,861,873,884,895,905,915,925,934,943,951,959,967,974,
+		980,987,992,997,1002,1006,1010,1013,1016,1018,1020,1021,1022,1023,1022,
+		1021,1020,1018,1016,1013,1010,1006,1002,997,992,987,980,974,967,959,951,
+		943,934,925,915,905,895,884,873,861,849,837,825,812,799,785,771,757,743,
+		729,714,699,684,669,654,638,623,607,591,575,559,543,527,511,495,479,463,
+		447,431,415,399,384,368,353,338,323,308,293,279,265,251,237,223,210,197,
+		185,173,161,149,138,127,117,107,97,88,79,71,63,55,48,42,35,30,25,20,16,
+		12,9,6,4,2,1,0,0,0,1,2,4,6,9,12,16,20,25,30,35,42,48,55,63,71,79,88,97,
+		107,117,127,138,149,161,173,185,197,210,223,237,251,265,279,293,308,323,
+		338,353,368,384,399,415,431,447,463,479,495,511
+};
+
+uint32_t saw_LUT[NS] = {
+		0,10,21,31,41,52,62,72,83,93,103,114,124,134,145,155,165,176,186,196,207,217,227,
+		238,248,258,269,279,289,300,310,320,331,341,351,362,372,382,393,403,413,424,434,
+		444,455,465,475,486,496,506,517,527,537,548,558,568,579,589,599,610,620,630,641,
+		651,661,672,682,692,703,713,723,734,744,754,765,775,785,796,806,816,827,837,847,
+		858,868,878,889,899,909,920,930,940,951,961,971,982,992,1002,1013,1023,0,10,21,
+		31,41,52,62,72,83,93,103,114,124,134,145,155,165,176,186,196,207,217,227,238,248,
+		258,269,279,289,300,310,320,331,341,351,362,372,382,393,403,413,424,434,444,455,
+		465,475,486,496,506,517,527,537,548,558,568,579,589,599,610,620,630,641,651,661,
+		672,682,692,703,713,723,734,744,754,765,775,785,796,806,816,827,837,847,858,868,
+		878,889,899,909,920,930,940,951,961,971,982,992,1002,1013,1023
+};
+uint32_t triangle_LUT[NS] = {
+		0,20,41,61,82,102,123,143,164,184,205,225,246,266,286,307,327,348,368,389,409,430,450,
+		471,491,512,532,552,573,593,614,634,655,675,696,716,737,757,777,798,818,839,859,880,
+		900,921,941,962,982,1003,1023,1003,982,962,941,921,900,880,859,839,818,798,777,757,737,
+		716,696,675,655,634,614,593,573,552,532,512,491,471,450,430,409,389,368,348,327,307,286,
+		266,246,225,205,184,164,143,123,102,82,61,41,20,0,20,41,61,82,102,123,143,164,184,205,
+		225,246,266,286,307,327,348,368,389,409,430,450,471,491,512,532,552,573,593,614,634,655,
+		675,696,716,737,757,777,798,818,839,859,880,900,921,941,962,982,1003,1023,1003,982,962,
+		941,921,900,880,859,839,818,798,777,757,737,716,696,675,655,634,614,593,573,552,532,512,
+		491,471,450,430,409,389,368,348,327,307,286,266,246,225,205,184,164,143,123,102,82,61,41,20
+};
 
 uint32_t audio_LUT[60000] = {
 		191, 191, 191, 191, 191, 191, 191, 191, 191, 191, 191, 191, 191, 191, 191,
@@ -4064,6 +4094,8 @@ uint32_t audio_LUT[60000] = {
 //TASK 3
 //Calculate TIM2_Ticks
 uint32_t TIM2_Ticks = 0;
+uint32_t denominator = NS*F_SIGNAL;
+uint32_t TIM2_Ticks = TIM2CLK/denominator;
 
 /* USER CODE END PV */
 
@@ -4118,15 +4150,18 @@ int main(void)
   //TO DO:
   //TASK 4
   //Start TIM3 in PWM mode on channel 1
+  HAL_TIM_PWM_Start(&htim3, 1);
 
   //Start TIM2 in Output Compare (OC) mode on channel 1.
+  HAL_TIM_PWM_Start(&htim2, 2);
 
-  //Start the DMA in interrupt (IT) mode.
-  uint32_t DestAddress = (uint32_t) &(TIM3->CCR1);
+  //Start the DMA in interrupt (IT) mode
+  uint32_t DestAddress = (uint32_t)&(TIM3->CCR1);
+  uint32_t SourceAdress = (uint32_t)sin_LUT;
+  HAL_DMA_Start_IT(&htim2, SourceAddress, DestAddress, DataLength);
+  __HAL_TIM_ENABLE_DMA(&htim2, DestAdress);
 
   //Start the DMA transfer
-
-
 
   /* USER CODE END 2 */
 
@@ -4359,8 +4394,10 @@ void EXTI0_1_IRQHandler(void)
 	//TASK 5
 	//Disable DMA transfer, start DMA in IT mode with new source and re enable transfer
 	//Remember to debounce using HAL_GetTick()
-	__HAL_TIM_DISABLE_DMA(&htim2, TIM_DMA_CC1); // disabling DMA transfer
-
+	//__HAL_TIM_DISABLE_DMA(&htim2, TIM_DMA_CC1); // disabling DMA transfer
+	HAL_DMA_Abort();
+	uint32_t DestAddress = (uint32_t) &(TIM3->CCR1);
+	int LookUpTable = 0;
 	counterOutside++; //code for debouncing starts here
 	currentMillis = HAL_GetTick(); // returns current clock period
 
@@ -4368,7 +4405,27 @@ void EXTI0_1_IRQHandler(void)
 		counterInside++; // For testing only
 		HAL_GPIO_TogglePin(GPIOC, GPIO_Pin_8);
 		previousMillis = currentMillis;
+
+		if (LookUpTable==0) {
+			uint32_t SourceAddress = (uint32_t)sin_LUT;
+			HAL_DMA_Start_IT(&hdma_tim2_ch1, SourceAddress, DestAddress, NS);
+			__HAL_TIM_ENABLE_DMA(&htim2, TIM_DMA_CC1);
+			LookUpTable = 1;
+		}
+		else if (LookUpTable==1) {
+			uint32_t SourceAddress = (uint32_t)saw_LUT;
+			HAL_DMA_Start_IT(&hdma_tim2_ch1, SourceAddress, DestAddress, NS);
+			__HAL_TIM_ENABLE_DMA(&htim2, TIM_DMA_CC1);
+			LookUpTable = 2;
+		}
+		else {
+			uint32_t SourceAddress = (uint32_t)triangle_LUT;
+			HAL_DMA_Start_IT(&hdma_tim2_ch1, SourceAddress, DestAddress, NS);
+			__HAL_TIM_ENABLE_DMA(&htim2, TIM_DMA_CC1);
+			LookUpTable = 0;
+		}
 	}
+
 	__HAL_TIM_DISABLE_DMA(&htim2, TIM_DMA_CC1);
 
 	HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0); // Clear interrupt flags
